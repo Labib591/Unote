@@ -12,15 +12,6 @@ class customToolbar extends StatelessWidget{
           children: [
             Padding(
               padding: const EdgeInsets.all(100),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  IconButton(onPressed: (){}, icon: Icon(CupertinoIcons.pen),),
-                  IconButton(onPressed: (){}, icon: Icon(CupertinoIcons.bandage_fill),),
-                  IconButton(onPressed: (){}, icon: Icon(Icons.undo),),
-                  IconButton(onPressed: (){}, icon: Icon(Icons.redo),)
-                ],
-              ),
             )
           ],
         ),
