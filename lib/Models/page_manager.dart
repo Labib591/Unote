@@ -29,4 +29,6 @@ class PageManager extends ChangeNotifier{
       notifyListeners();
     }
   }
+
+  List<List<Offset?>> get pages => _pages;
 }

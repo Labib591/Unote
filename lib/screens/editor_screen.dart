@@ -3,10 +3,96 @@ import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:unote/Models/drawing_painter.dart';
 import 'package:unote/Models/page_manager.dart';
-import 'package:unote/Models/toolbar_fucntions.dart';
-import 'package:unote/widgets/custom_toolbar.dart';
+import 'package:unote/Models/save.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:app_settings/app_settings.dart';
 
 class editorScreen extends StatelessWidget{
+  Future<bool> _requestPermission() async {
+    try {
+      var status = await Permission.storage.status;
+      if (status.isDenied) {
+        status = await Permission.storage.request();
+      }
+      return status.isGranted;
+    } catch (e) {
+      print('Error requesting permission: $e');
+      return false;
+    }
+  }
+
+  void _showSaveDialog(BuildContext context) async {
+    // Check permission before showing dialog
+    bool hasPermission = await _requestPermission();
+    if (!hasPermission) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Storage permission is required'),
+          action: SnackBarAction(
+            label: 'Settings',
+            onPressed: () => openAppSettings(),
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Show dialog only if we have permission
+    if (!context.mounted) return;
+    
+    final TextEditingController fileNameController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text('Save Note'),
+          content: TextField(
+            controller: fileNameController,
+            decoration: InputDecoration(
+              hintText: 'Enter file name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (fileNameController.text.isEmpty) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    SnackBar(content: Text('Please enter a file name')),
+                  );
+                  return;
+                }
+
+                try {
+                  await NoteSaver.saveNote(
+                    context.read<PageManager>().pages,
+                    fileNameController.text,
+                  );
+                  Navigator.pop(dialogContext);
+                  if (!dialogContext.mounted) return;
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    SnackBar(content: Text('Note saved successfully!')),
+                  );
+                } catch (e) {
+                  print('Error saving note: $e');
+                  if (!dialogContext.mounted) return;
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    SnackBar(content: Text('Failed to save note: ${e.toString()}')),
+                  );
+                }
+              },
+              child: Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // TODO: implement build
@@ -29,9 +115,11 @@ class editorScreen extends StatelessWidget{
               onPressed: () => context.read<PageManager>().deletePage(),
             ),
             IconButton(
-              icon: Icon(Icons.minimize_rounded,
-                color: Colors.white,),
-              onPressed: () => context.read<ToolbarFunctions>().erase(),
+              icon: Icon(
+                Icons.save,
+                color: Colors.white,
+              ),
+              onPressed: () => _showSaveDialog(context),
             ),
           ],
         ),
