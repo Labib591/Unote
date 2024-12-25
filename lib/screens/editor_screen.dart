@@ -6,6 +6,7 @@ import 'package:unote/Models/page_manager.dart';
 import 'package:unote/Models/save.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 class editorScreen extends StatelessWidget{
   Future<bool> _requestPermission() async {
@@ -95,51 +96,153 @@ class editorScreen extends StatelessWidget{
 
   @override
   Widget build(BuildContext context) {
-    // TODO: implement build
-    return Scaffold(
-      backgroundColor: Colors.black,
+    return WillPopScope(
+      onWillPop: () async {
+        // Force one last save before leaving
+        final pageManager = context.read<PageManager>();
+        if (pageManager.fileName != null) {
+          try {
+            await NoteSaver.saveNote(pageManager.pages, pageManager.fileName!);
+            print('Auto-saved note before exit: ${pageManager.fileName}');
+          } catch (e) {
+            print('Error saving note on exit: $e');
+          }
+        }
+        return true;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
         appBar: AppBar(
           backgroundColor: Colors.black,
-          title: Text("MY NOTE", style: TextStyle(
-            color: Colors.white
-          ),),
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () async {
+              // Save before going back
+              final pageManager = context.read<PageManager>();
+              if (pageManager.fileName != null) {
+                try {
+                  await NoteSaver.saveNote(pageManager.pages, pageManager.fileName!);
+                  print('Auto-saved note before navigation: ${pageManager.fileName}');
+                } catch (e) {
+                  print('Error saving note on navigation: $e');
+                }
+              }
+              Navigator.pop(context);
+            },
+          ),
+          title: Text("MY NOTE", style: TextStyle(color: Colors.white)),
           actions: [
             IconButton(
-              icon: Icon(Icons.add,
-              color: Colors.white,),
+              icon: Icon(Icons.add, color: Colors.white),
               onPressed: () => context.read<PageManager>().addPage(),
             ),
             IconButton(
-              icon: Icon(Icons.delete,
-              color: Colors.white,),
+              icon: Icon(Icons.delete, color: Colors.white),
               onPressed: () => context.read<PageManager>().deletePage(),
-            ),
-            IconButton(
-              icon: Icon(
-                Icons.save,
-                color: Colors.white,
-              ),
-              onPressed: () => _showSaveDialog(context),
             ),
           ],
         ),
         body: Consumer<PageManager>(
-              builder: (context, PageManager , child) {
-                return DrawingCanvas(PageManager.currentPage);
-              },
-            ),
-        bottomNavigationBar: Consumer<PageManager >(
-          builder: (context, PageManager , child) {
+          builder: (context, pageManager, child) {
+            return Stack(
+              children: [
+                DrawingCanvas(pageManager.currentPage),
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  child: Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.only(
+                        bottomRight: Radius.circular(16),
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Color picker
+                        IconButton(
+                          icon: Icon(Icons.color_lens, 
+                            color: pageManager.currentColor),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: Text('Select Color'),
+                                content: SingleChildScrollView(
+                                  child: BlockPicker(
+                                    pickerColor: pageManager.currentColor,
+                                    onColorChanged: (color) {
+                                      pageManager.setColor(color);
+                                      Navigator.pop(context);
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        // Thickness slider
+                        IconButton(
+                          icon: Icon(Icons.line_weight, color: Colors.white),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: Text('Pen Thickness'),
+                                content: StatefulBuilder(
+                                  builder: (context, setState) => Slider(
+                                    value: pageManager.currentThickness,
+                                    min: 1,
+                                    max: 10,
+                                    onChanged: (value) {
+                                      pageManager.setThickness(value);
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        // Eraser
+                        IconButton(
+                          icon: Icon(Icons.auto_fix_high,
+                            color: pageManager.isErasing ? Colors.blue : Colors.white),
+                          onPressed: () => pageManager.toggleEraser(),
+                        ),
+                        // Undo
+                        IconButton(
+                          icon: Icon(Icons.undo, 
+                            color: pageManager.canUndo ? Colors.white : Colors.grey),
+                          onPressed: pageManager.canUndo ? () => pageManager.undo() : null,
+                        ),
+                        // Redo
+                        IconButton(
+                          icon: Icon(Icons.redo,
+                            color: pageManager.canRedo ? Colors.white : Colors.grey),
+                          onPressed: pageManager.canRedo ? () => pageManager.redo() : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        bottomNavigationBar: Consumer<PageManager>(
+          builder: (context, pageManager, child) {
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(PageManager.totalPages, (index) {
+              children: List.generate(pageManager.totalPages, (index) {
                 return GestureDetector(
-                  onTap: () => PageManager.switchPage(index),
+                  onTap: () => pageManager.switchPage(index),
                   child: Container(
                     margin: EdgeInsets.all(4),
                     padding: EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: PageManager.currentIndex == index ? Colors.blue : Colors.grey,
+                      color: pageManager.currentIndex == index ? Colors.blue : Colors.grey,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text("Page ${index + 1}"),
@@ -149,6 +252,7 @@ class editorScreen extends StatelessWidget{
             );
           },
         ),
+      ),
     );
   }
 }
