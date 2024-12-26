@@ -6,7 +6,7 @@ import 'package:unote/Models/save.dart';
 import 'package:provider/provider.dart';
 import 'package:unote/Models/page_manager.dart';
 import 'package:path/path.dart' as path;
-import 'package:unote/Models/drawing_painter.dart';
+import 'package:unote/Models/drawing_canvas.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -143,9 +143,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: CustomPaint(
                               painter: DrawingPainter(
                                 snapshot.data![0],
-                                currentShape: ShapeType.none,
                                 currentColor: Colors.white,
                                 currentThickness: 2.0,
+                                currentShape: ShapeType.none,
                               ),
                             ),
                           ),

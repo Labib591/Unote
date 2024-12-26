@@ -96,6 +96,7 @@ class editorScreen extends StatelessWidget{
 
   @override
   Widget build(BuildContext context) {
+    final pageManager = context.watch<PageManager>();
     return WillPopScope(
       onWillPop: () async {
         // Force one last save before leaving
@@ -116,119 +117,182 @@ class editorScreen extends StatelessWidget{
           backgroundColor: Colors.black,
           leading: IconButton(
             icon: Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () async {
-              // Save before going back
-              final pageManager = context.read<PageManager>();
-              if (pageManager.fileName != null) {
-                try {
-                  await NoteSaver.saveNote(pageManager.pages, pageManager.fileName!);
-                  print('Auto-saved note before navigation: ${pageManager.fileName}');
-                } catch (e) {
-                  print('Error saving note on navigation: $e');
-                }
-              }
-              Navigator.pop(context);
-            },
+            onPressed: () => Navigator.pop(context),
           ),
-          title: Text("MY NOTE", style: TextStyle(color: Colors.white)),
-          actions: [
-            IconButton(
-              icon: Icon(Icons.add, color: Colors.white),
-              onPressed: () => context.read<PageManager>().addPage(),
-            ),
-            IconButton(
-              icon: Icon(Icons.delete, color: Colors.white),
-              onPressed: () => context.read<PageManager>().deletePage(),
-            ),
-          ],
+          title: Text(pageManager.fileName ?? 'Untitled'),
         ),
-        body: Consumer<PageManager>(
-          builder: (context, pageManager, child) {
-            return Stack(
-              children: [
-                DrawingCanvas(pageManager.currentPage),
-                Positioned(
-                  left: 0,
-                  top: 0,
-                  child: Container(
-                    padding: EdgeInsets.all(8),
+        body: Stack(
+          children: [
+            DrawingCanvas(
+              currentPage: pageManager.currentPage,
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 20,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.only(
-                        bottomRight: Radius.circular(16),
-                      ),
+                      color: Colors.purple.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(30),
                     ),
-                    child: Column(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Color picker
-                        IconButton(
-                          icon: Icon(Icons.color_lens, 
-                            color: pageManager.currentColor),
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: Text('Select Color'),
-                                content: SingleChildScrollView(
-                                  child: BlockPicker(
-                                    pickerColor: pageManager.currentColor,
-                                    onColorChanged: (color) {
-                                      pageManager.setColor(color);
-                                      Navigator.pop(context);
-                                    },
-                                  ),
-                                ),
+                        // Pen style and color
+                        PopupMenuButton<dynamic>(
+                          icon: Icon(Icons.brush, color: Colors.white),
+                          itemBuilder: (context) => [
+                            // Pen Styles
+                            PopupMenuItem(
+                              child: ListTile(
+                                title: Text('Pen Styles', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                               ),
-                            );
+                              enabled: false,
+                            ),
+                            PopupMenuItem(
+                              value: {'type': 'style', 'style': PenStyle.normal},
+                              child: Row(
+                                children: [
+                                  Icon(Icons.horizontal_rule),
+                                  SizedBox(width: 8),
+                                  Text('Normal'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: {'type': 'style', 'style': PenStyle.dotted},
+                              child: Row(
+                                children: [
+                                  Text('••••'),
+                                  SizedBox(width: 8),
+                                  Text('Dotted'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: {'type': 'style', 'style': PenStyle.dashed},
+                              child: Row(
+                                children: [
+                                  Text('- - -'),
+                                  SizedBox(width: 8),
+                                  Text('Dashed'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: {'type': 'style', 'style': PenStyle.double},
+                              child: Row(
+                                children: [
+                                  Text('═'),
+                                  SizedBox(width: 8),
+                                  Text('Double'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              child: Divider(color: Colors.grey),
+                              height: 1,
+                              enabled: false,
+                            ),
+                            // Colors
+                            PopupMenuItem(
+                              child: ListTile(
+                                title: Text('Colors', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              ),
+                              enabled: false,
+                            ),
+                            ...Colors.primaries.map((color) => PopupMenuItem(
+                              value: {'type': 'color', 'color': color},
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: color,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(color.toString().split('(0xff')[1].split(')')[0]),
+                                ],
+                              ),
+                            )).toList(),
+                          ],
+                          onSelected: (value) {
+                            if (value['type'] == 'style') {
+                              context.read<PageManager>().setPenStyle(value['style']);
+                            } else if (value['type'] == 'color') {
+                              context.read<PageManager>().setColor(value['color']);
+                            }
                           },
                         ),
-                        // Thickness slider
+                        // Pen thickness
                         IconButton(
                           icon: Icon(Icons.line_weight, color: Colors.white),
                           onPressed: () {
                             showDialog(
                               context: context,
                               builder: (context) => AlertDialog(
-                                title: Text('Pen Thickness'),
+                                backgroundColor: Colors.grey.shade900,
+                                title: Text('Pen Thickness', style: TextStyle(color: Colors.white)),
                                 content: StatefulBuilder(
-                                  builder: (context, setState) => Slider(
-                                    value: pageManager.currentThickness.clamp(1.0, 10.0),
-                                    min: 1.0,
-                                    max: 10.0,
-                                    divisions: 9,
-                                    onChanged: (value) {
-                                      pageManager.setThickness(value);
-                                    },
-                                  ),
+                                  builder: (context, setState) {
+                                    return Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Slider(
+                                          value: pageManager.currentThickness,
+                                          min: 1.0,
+                                          max: 20.0,
+                                          divisions: 19,
+                                          label: pageManager.currentThickness.round().toString(),
+                                          onChanged: (value) {
+                                            setState(() {
+                                              pageManager.setThickness(value);
+                                            });
+                                          },
+                                        ),
+                                        SizedBox(height: 20),
+                                        Container(
+                                          height: 50,
+                                          decoration: BoxDecoration(
+                                            color: Colors.black,
+                                            border: Border.all(color: Colors.grey),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Center(
+                                            child: Container(
+                                              width: 100,
+                                              height: pageManager.currentThickness,
+                                              color: pageManager.currentColor,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
                                 ),
+                                actions: [
+                                  TextButton(
+                                    child: Text('OK'),
+                                    onPressed: () => Navigator.pop(context),
+                                  ),
+                                ],
                               ),
                             );
                           },
                         ),
                         // Eraser
                         IconButton(
-                          icon: Icon(Icons.auto_fix_high,
-                            color: pageManager.isErasing ? Colors.blue : Colors.white),
+                          icon: Icon(Icons.close,
+                            color: pageManager.isErasing ? Colors.red : Colors.white),
                           onPressed: () => pageManager.toggleEraser(),
                         ),
-                        // Add eraser size slider when eraser is active
-                        if (pageManager.isErasing)
-                          Container(
-                            width: 40,
-                            height: 100,
-                            child: RotatedBox(
-                              quarterTurns: 3,
-                              child: Slider(
-                                value: pageManager.eraserSize,
-                                min: 5,
-                                max: 50,
-                                activeColor: Colors.blue,
-                                inactiveColor: Colors.grey,
-                                onChanged: (value) => pageManager.setEraserSize(value),
-                              ),
-                            ),
-                          ),
                         // Undo
                         IconButton(
                           icon: Icon(Icons.undo,
@@ -241,107 +305,75 @@ class editorScreen extends StatelessWidget{
                             color: pageManager.canRedo ? Colors.white : Colors.grey),
                           onPressed: pageManager.canRedo ? () => pageManager.redo() : null,
                         ),
-                        // Crop
+                        // Delete page
                         IconButton(
-                          icon: Icon(Icons.crop_free,
-                            color: pageManager.isSelecting ? Colors.blue : Colors.white),
-                          onPressed: () => pageManager.startSelection(),
-                        ),
-                        if (pageManager.isSelecting && pageManager.selectionRect != null)
-                          Column(
-                            children: [
-                              IconButton(
-                                icon: Icon(Icons.copy, color: Colors.white),
-                                onPressed: () => pageManager.copySelection(),
+                          icon: Icon(Icons.delete, color: Colors.white),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                backgroundColor: Colors.grey.shade900,
+                                title: Text('Delete Page',
+                                  style: TextStyle(color: Colors.white)),
+                                content: Text('Are you sure you want to delete this page?',
+                                  style: TextStyle(color: Colors.white)),
+                                actions: [
+                                  TextButton(
+                                    child: Text('Cancel'),
+                                    onPressed: () => Navigator.pop(context),
+                                  ),
+                                  TextButton(
+                                    child: Text('Delete',
+                                      style: TextStyle(color: Colors.red)),
+                                    onPressed: () {
+                                      pageManager.deletePage();
+                                      Navigator.pop(context);
+                                    },
+                                  ),
+                                ],
                               ),
-                              IconButton(
-                                icon: Icon(Icons.delete, color: Colors.white),
-                                onPressed: () => pageManager.deleteSelection(),
-                              ),
-                              if (pageManager.copiedStrokes != null)
-                                IconButton(
-                                  icon: Icon(Icons.paste, color: Colors.white),
-                                  onPressed: () => pageManager.pasteSelection(Offset.zero),
-                                ),
-                            ],
-                          ),
-                        // Add to your toolbar Column
-                        PopupMenuButton<PenStyle>(
-                          icon: Icon(Icons.brush, color: Colors.white),
-                          onSelected: (PenStyle style) {
-                            context.read<PageManager>().setPenStyle(style);
+                            );
                           },
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: PenStyle.normal,
-                              child: Row(
-                                children: [
-                                  Icon(Icons.horizontal_rule),
-                                  SizedBox(width: 8),
-                                  Text('Normal'),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: PenStyle.dotted,
-                              child: Row(
-                                children: [
-                                  Text('••••'),
-                                  SizedBox(width: 8),
-                                  Text('Dotted'),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: PenStyle.dashed,
-                              child: Row(
-                                children: [
-                                  Text('- - -'),
-                                  SizedBox(width: 8),
-                                  Text('Dashed'),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: PenStyle.double,
-                              child: Row(
-                                children: [
-                                  Text('═'),
-                                  SizedBox(width: 8),
-                                  Text('Double'),
-                                ],
-                              ),
-                            ),
-                          ],
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
-            );
-          },
-        ),
-        bottomNavigationBar: Consumer<PageManager>(
-          builder: (context, pageManager, child) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(pageManager.totalPages, (index) {
-                return GestureDetector(
-                  onTap: () => pageManager.switchPage(index),
-                  child: Container(
-                    margin: EdgeInsets.all(4),
-                    padding: EdgeInsets.all(8),
+                  SizedBox(width: 16),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     decoration: BoxDecoration(
-                      color: pageManager.currentIndex == index ? Colors.blue : Colors.grey,
-                      borderRadius: BorderRadius.circular(4),
+                      color: Colors.purple.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(30),
                     ),
-                    child: Text("Page ${index + 1}"),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Previous page
+                        IconButton(
+                          icon: Icon(Icons.arrow_left,
+                            color: pageManager.canGoToPreviousPage ? Colors.white : Colors.grey),
+                          onPressed: pageManager.canGoToPreviousPage ?
+                            () => pageManager.previousPage() : null,
+                        ),
+                        // Add new page
+                        IconButton(
+                          icon: Icon(Icons.add, color: Colors.white),
+                          onPressed: () => pageManager.addPage(),
+                        ),
+                        // Next page
+                        IconButton(
+                          icon: Icon(Icons.arrow_right,
+                            color: pageManager.canGoToNextPage ? Colors.white : Colors.grey),
+                          onPressed: pageManager.canGoToNextPage ?
+                            () => pageManager.nextPage() : null,
+                        ),
+                      ],
+                    ),
                   ),
-                );
-              }),
-            );
-          },
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

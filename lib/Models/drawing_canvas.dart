@@ -4,16 +4,12 @@ import 'package:unote/Models/page_manager.dart';
 
 class DrawingPainter extends CustomPainter {
   final List<Stroke> strokes;
-  final Offset? shapeStart;
-  final Offset? shapeEnd;
   final ShapeType currentShape;
   final Color currentColor;
   final double currentThickness;
 
   DrawingPainter(
     this.strokes, {
-    this.shapeStart,
-    this.shapeEnd,
     required this.currentShape,
     required this.currentColor,
     required this.currentThickness,
@@ -42,10 +38,15 @@ class DrawingPainter extends CustomPainter {
 }
 
 class DrawingCanvas extends StatefulWidget {
-  final List<Stroke> strokes;
-  DrawingCanvas(this.strokes);
+  final List<Stroke> currentPage;
+  
+  const DrawingCanvas({
+    super.key,
+    required this.currentPage,
+  });
+  
   @override
-  _DrawingCanvasState createState() => _DrawingCanvasState();
+  State<DrawingCanvas> createState() => _DrawingCanvasState();
 }
 
 class _DrawingCanvasState extends State<DrawingCanvas> {
@@ -53,47 +54,24 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   Widget build(BuildContext context) {
     return Consumer<PageManager>(
       builder: (context, pageManager, child) {
-        print('Current shape type: ${pageManager.currentShape}');
-        
-        return Container(
-          color: Colors.black,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onPanStart: (details) {
-              print('Pan start: ${details.localPosition}');
-              if (pageManager.currentShape != ShapeType.none) {
-                pageManager.startShape(details.localPosition);
-              } else {
-                pageManager.addPoint(details.localPosition);
-              }
-            },
-            onPanUpdate: (details) {
-              print('Pan update: ${details.localPosition}');
-              if (pageManager.currentShape != ShapeType.none) {
-                pageManager.updateShape(details.localPosition);
-              } else {
-                pageManager.addPoint(details.localPosition);
-              }
-            },
-            onPanEnd: (details) {
-              print('Pan end');
-              if (pageManager.currentShape != ShapeType.none) {
-                pageManager.endShape();
-              } else {
-                pageManager.endLine();
-              }
-            },
-            child: CustomPaint(
-              painter: DrawingPainter(
-                widget.strokes,
-                shapeStart: pageManager.shapeStart,
-                shapeEnd: pageManager.shapeEnd,
-                currentShape: pageManager.currentShape,
-                currentColor: pageManager.currentColor,
-                currentThickness: pageManager.currentThickness,
-              ),
-              size: Size.infinite,
+        return GestureDetector(
+          onPanStart: (details) {
+            pageManager.addPoint(details.localPosition);
+          },
+          onPanUpdate: (details) {
+            pageManager.addPoint(details.localPosition);
+          },
+          onPanEnd: (details) {
+            pageManager.endLine();
+          },
+          child: CustomPaint(
+            painter: DrawingPainter(
+              widget.currentPage,
+              currentColor: pageManager.currentColor,
+              currentThickness: pageManager.currentThickness,
+              currentShape: ShapeType.none,
             ),
+            size: Size.infinite,
           ),
         );
       },

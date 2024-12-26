@@ -103,6 +103,44 @@ class PageManager extends ChangeNotifier{
 
   PenStyle get currentPenStyle => _currentPenStyle;
 
+  bool get canGoToPreviousPage => _currentIndex > 0;
+  bool get canGoToNextPage => _currentIndex < _pages.length - 1;
+
+  void previousPage() {
+    if (canGoToPreviousPage) {
+      _currentIndex--;
+      notifyListeners();
+    }
+  }
+
+  void nextPage() {
+    if (canGoToNextPage) {
+      _currentIndex++;
+      notifyListeners();
+    }
+  }
+
+  void addPage() {
+    _pages.add([]);
+    _currentIndex = _pages.length - 1;
+    notifyListeners();
+  }
+
+  void deletePage() {
+    if (_pages.length > 1) {
+      _pages.removeAt(_currentIndex);
+      if (_currentIndex >= _pages.length) {
+        _currentIndex = _pages.length - 1;
+      }
+      notifyListeners();
+    }
+  }
+
+  void setThickness(double thickness) {
+    _currentThickness = thickness;
+    notifyListeners();
+  }
+
   void setFileName(String name) {
     _fileName = name;
     notifyListeners();
@@ -111,11 +149,6 @@ class PageManager extends ChangeNotifier{
   void setColor(Color color) {
     _currentColor = color;
     _isErasing = false;
-    notifyListeners();
-  }
-
-  void setThickness(double thickness) {
-    _currentThickness = thickness;
     notifyListeners();
   }
 
@@ -198,22 +231,6 @@ class PageManager extends ChangeNotifier{
       _currentStroke!.points.add(null);
       _currentStroke = null;
     }
-    notifyListeners();
-    _autoSave();
-  }
-
-  void addPage(){
-    _pages.add([]);
-    _currentIndex = _pages.length-1;
-    notifyListeners();
-    _autoSave();
-  }
-
-  void deletePage(){
-    if(_pages.length > 1){
-      _pages.removeAt(_currentIndex);
-    }
-    _currentIndex = (_currentIndex-1).clamp(0, _pages.length-1);
     notifyListeners();
     _autoSave();
   }
