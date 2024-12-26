@@ -17,8 +17,9 @@ Unote is a Flutter application designed for seamless note-taking. It supports mu
    git clone https://github.com/your-username/unote.git
    cd unote
 
-2.**Install dependencies:** ```sh
-flutter pub get
+2. **Install dependencies:**
+   ```sh
+   flutter pub get
 
 3. **Run the application:**
    ```sh
