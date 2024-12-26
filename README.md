@@ -1,6 +1,6 @@
 # Unote
 
-Unote is a Flutter application designed for note-taking. It supports multiple platforms including Android, iOS, macOS, Windows, Linux, and Web.
+Unote is a Flutter application designed for seamless note-taking. It supports multiple platforms, including Android, iOS, macOS, Windows, Linux, and Web.
 
 ## Getting Started
 
@@ -16,10 +16,11 @@ Unote is a Flutter application designed for note-taking. It supports multiple pl
    ```sh
    git clone https://github.com/your-username/unote.git
    cd unote
+
 2.**Install dependencies:**
-   ```sh
-    flutter pub get
-3.**Run the application:**
+flutter pub get
+
+3. **Run the application:**
    ```sh
     flutter run
 
