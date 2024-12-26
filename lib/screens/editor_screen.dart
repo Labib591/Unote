@@ -193,9 +193,10 @@ class editorScreen extends StatelessWidget{
                                 title: Text('Pen Thickness'),
                                 content: StatefulBuilder(
                                   builder: (context, setState) => Slider(
-                                    value: pageManager.currentThickness,
-                                    min: 1,
-                                    max: 10,
+                                    value: pageManager.currentThickness.clamp(1.0, 10.0),
+                                    min: 1.0,
+                                    max: 10.0,
+                                    divisions: 9,
                                     onChanged: (value) {
                                       pageManager.setThickness(value);
                                     },
@@ -211,9 +212,26 @@ class editorScreen extends StatelessWidget{
                             color: pageManager.isErasing ? Colors.blue : Colors.white),
                           onPressed: () => pageManager.toggleEraser(),
                         ),
+                        // Add eraser size slider when eraser is active
+                        if (pageManager.isErasing)
+                          Container(
+                            width: 40,
+                            height: 100,
+                            child: RotatedBox(
+                              quarterTurns: 3,
+                              child: Slider(
+                                value: pageManager.eraserSize,
+                                min: 5,
+                                max: 50,
+                                activeColor: Colors.blue,
+                                inactiveColor: Colors.grey,
+                                onChanged: (value) => pageManager.setEraserSize(value),
+                              ),
+                            ),
+                          ),
                         // Undo
                         IconButton(
-                          icon: Icon(Icons.undo, 
+                          icon: Icon(Icons.undo,
                             color: pageManager.canUndo ? Colors.white : Colors.grey),
                           onPressed: pageManager.canUndo ? () => pageManager.undo() : null,
                         ),
@@ -222,6 +240,79 @@ class editorScreen extends StatelessWidget{
                           icon: Icon(Icons.redo,
                             color: pageManager.canRedo ? Colors.white : Colors.grey),
                           onPressed: pageManager.canRedo ? () => pageManager.redo() : null,
+                        ),
+                        // Crop
+                        IconButton(
+                          icon: Icon(Icons.crop_free,
+                            color: pageManager.isSelecting ? Colors.blue : Colors.white),
+                          onPressed: () => pageManager.startSelection(),
+                        ),
+                        if (pageManager.isSelecting && pageManager.selectionRect != null)
+                          Column(
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.copy, color: Colors.white),
+                                onPressed: () => pageManager.copySelection(),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.delete, color: Colors.white),
+                                onPressed: () => pageManager.deleteSelection(),
+                              ),
+                              if (pageManager.copiedStrokes != null)
+                                IconButton(
+                                  icon: Icon(Icons.paste, color: Colors.white),
+                                  onPressed: () => pageManager.pasteSelection(Offset.zero),
+                                ),
+                            ],
+                          ),
+                        // Add to your toolbar Column
+                        PopupMenuButton<PenStyle>(
+                          icon: Icon(Icons.brush, color: Colors.white),
+                          onSelected: (PenStyle style) {
+                            context.read<PageManager>().setPenStyle(style);
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: PenStyle.normal,
+                              child: Row(
+                                children: [
+                                  Icon(Icons.horizontal_rule),
+                                  SizedBox(width: 8),
+                                  Text('Normal'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: PenStyle.dotted,
+                              child: Row(
+                                children: [
+                                  Text('••••'),
+                                  SizedBox(width: 8),
+                                  Text('Dotted'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: PenStyle.dashed,
+                              child: Row(
+                                children: [
+                                  Text('- - -'),
+                                  SizedBox(width: 8),
+                                  Text('Dashed'),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: PenStyle.double,
+                              child: Row(
+                                children: [
+                                  Text('═'),
+                                  SizedBox(width: 8),
+                                  Text('Double'),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

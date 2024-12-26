@@ -5,6 +5,8 @@ import 'package:unote/screens/editor_screen.dart';
 import 'package:unote/Models/save.dart';
 import 'package:provider/provider.dart';
 import 'package:unote/Models/page_manager.dart';
+import 'package:path/path.dart' as path;
+import 'package:unote/Models/drawing_painter.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -22,10 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadNotes() async {
     try {
-      final directory = await getExternalStorageDirectory();
-      if (directory == null) return;
-
-      final noteDirectory = Directory('${directory.path}/UNotes');
+      final noteDirectory = Directory(await NoteSaver.getNotesDirectory());
       if (!await noteDirectory.exists()) {
         await noteDirectory.create(recursive: true);
       }
@@ -63,149 +62,152 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
+        title: Text('My Notes'),
         backgroundColor: Colors.black,
-        title: Text('My Notes', style: TextStyle(color: Colors.white)),
         actions: [
           IconButton(
             icon: Icon(Icons.add, color: Colors.white),
             onPressed: () {
-              final fileName = 'Note_${DateTime.now().millisecondsSinceEpoch}';
-              final pageManager = PageManager();
-              pageManager.loadPages([[]], fileName);
-              
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ChangeNotifierProvider(
-                    create: (_) => pageManager,
-                    child: editorScreen(),
+              TextEditingController nameController = TextEditingController();
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text('New Note'),
+                  content: TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: 'Enter note name',
+                    ),
                   ),
+                  actions: [
+                    TextButton(
+                      child: Text('Cancel'),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    TextButton(
+                      child: Text('Create'),
+                      onPressed: () {
+                        final name = nameController.text;
+                        if (name.isNotEmpty) {
+                          final fileName = name.replaceAll(RegExp(r'[^\w\s-]'), '');
+                          final pageManager = PageManager();
+                          pageManager.loadPages([[]], fileName);
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChangeNotifierProvider(
+                                create: (_) => pageManager,
+                                child: editorScreen(),
+                              ),
+                            ),
+                          ).then((_) => _loadNotes());
+                        }
+                      },
+                    ),
+                  ],
                 ),
-              ).then((_) => _loadNotes());
+              );
             },
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadNotes,
-        child: notes.isEmpty
-            ? Center(
-                child: Text(
-                  'No notes yet\nTap + to create one',
-                  style: TextStyle(color: Colors.white),
-                  textAlign: TextAlign.center,
-                ),
-              )
-            : ListView.builder(
-                padding: EdgeInsets.all(8),
-                itemCount: notes.length,
-                itemBuilder: (context, index) {
-                  return FutureBuilder<String>(
-                    future: _getLastModified(notes[index].path),
-                    builder: (context, dateSnapshot) {
-                      return Card(
-                        color: Colors.grey[900],
-                        margin: EdgeInsets.symmetric(vertical: 4),
-                        child: InkWell(
-                          onTap: () async {
-                            try {
-                              final fileName = _getFileName(notes[index].path);
-                              print('Loading note: $fileName');
-                              
-                              final pages = await NoteSaver.loadNote(fileName);
-                              print('Loaded pages: ${pages.length}');
-                              
-                              if (!mounted) return;
-                              
-                              final pageManager = PageManager();
-                              pageManager.loadPages(pages, fileName);
-                              
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ChangeNotifierProvider(
-                                    create: (_) => pageManager,
-                                    child: editorScreen(),
-                                  ),
-                                ),
-                              ).then((_) => _loadNotes());
-                            } catch (e) {
-                              print('Error in onTap: $e');
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error loading note: $e')),
-                              );
-                            }
-                          },
-                          child: Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Row(
-                              children: [
-                                // Preview
-                                FutureBuilder<File?>(
-                                  future: _getPreviewFile(_getFileName(notes[index].path)),
-                                  builder: (context, previewSnapshot) {
-                                    return Container(
-                                      width: 50,
-                                      height: 50,
-                                      decoration: BoxDecoration(
-                                        border: Border.all(color: Colors.grey[800]!),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: previewSnapshot.hasData && previewSnapshot.data != null
-                                          ? ClipRRect(
-                                              borderRadius: BorderRadius.circular(4),
-                                              child: Image.file(
-                                                previewSnapshot.data!,
-                                                fit: BoxFit.cover,
-                                              ),
-                                            )
-                                          : Icon(Icons.note, color: Colors.grey),
-                                    );
-                                  },
-                                ),
-                                SizedBox(width: 16),
-                                // Note details
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _getFileName(notes[index].path),
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        'Last modified: ${dateSnapshot.data ?? 'Loading...'}',
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.grey,
-                                ),
-                              ],
+      body: Container(
+        color: Colors.black,
+        child: ListView.builder(
+          itemCount: notes.length,
+          itemBuilder: (context, index) {
+            final fileName = path.basenameWithoutExtension(notes[index].path);
+            return ListTile(
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    border: Border.all(color: Colors.grey.shade800),
+                  ),
+                  clipBehavior: Clip.hardEdge,
+                  child: FutureBuilder<List<List<Stroke>>>(
+                    future: NoteSaver.loadNote(fileName),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                        return FittedBox(
+                          fit: BoxFit.contain,
+                          child: SizedBox(
+                            width: 50,
+                            height: 50,
+                            child: CustomPaint(
+                              painter: DrawingPainter(
+                                snapshot.data![0],
+                                currentShape: ShapeType.none,
+                                currentColor: Colors.white,
+                                currentThickness: 2.0,
+                              ),
                             ),
                           ),
-                        ),
-                      );
+                        );
+                      }
+                      return Center(child: Icon(Icons.note, color: Colors.grey));
                     },
+                  ),
+                ),
+              ),
+              title: Text(fileName, style: TextStyle(color: Colors.white)),
+              trailing: IconButton(
+                icon: Icon(Icons.delete, color: Colors.red),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: Colors.grey.shade900,
+                      title: Text('Delete Note', style: TextStyle(color: Colors.white)),
+                      content: Text('Are you sure you want to delete "$fileName"?',
+                          style: TextStyle(color: Colors.white)),
+                      actions: [
+                        TextButton(
+                          child: Text('Cancel'),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                        TextButton(
+                          child: Text('Delete', style: TextStyle(color: Colors.red)),
+                          onPressed: () async {
+                            await NoteSaver.deleteNote(fileName);
+                            Navigator.pop(context);
+                            _loadNotes();
+                          },
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),
+              onTap: () async {
+                try {
+                  final pages = await NoteSaver.loadNote(fileName);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChangeNotifierProvider(
+                        create: (_) {
+                          final pageManager = PageManager();
+                          pageManager.loadPages(pages, fileName);
+                          return pageManager;
+                        },
+                        child: editorScreen(),
+                      ),
+                    ),
+                  ).then((_) => _loadNotes());
+                } catch (e) {
+                  print('Error loading note: $e');
+                }
+              },
+            );
+          },
+        ),
       ),
     );
   }

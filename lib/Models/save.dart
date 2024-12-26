@@ -5,8 +5,21 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/rendering.dart';
 import 'package:unote/Models/page_manager.dart';
+import 'package:path/path.dart' as path;
 
 class NoteSaver {
+  static Future<String> getNotesDirectory() async {
+    if (Platform.isAndroid) {
+      final directory = await getExternalStorageDirectory();
+      if (directory == null) throw Exception('Failed to access external storage');
+      return path.join(directory.path, 'UNotes');
+    } else if (Platform.isWindows) {
+      final directory = await getApplicationDocumentsDirectory();
+      return path.join(directory.path, 'UNotes');
+    }
+    throw Exception('Unsupported platform');
+  }
+
   // Converts list of points to JSON-compatible format
   static List<Map<String, dynamic>?> _pointsToJson(List<Offset?> points) {
     return points.map((offset) {
@@ -32,27 +45,26 @@ class NoteSaver {
   // Save note to file
   static Future<void> saveNote(List<List<Stroke>> pages, String fileName) async {
     try {
-      final directory = await getExternalStorageDirectory();
-      if (directory == null) throw Exception('Failed to access external storage');
-
-      final noteDirectory = Directory('${directory.path}/UNotes');
+      final noteDirectory = Directory(await getNotesDirectory());
       if (!await noteDirectory.exists()) {
         await noteDirectory.create(recursive: true);
       }
 
-      final file = File('${noteDirectory.path}/$fileName.unote');
+      final file = File(path.join(noteDirectory.path, '$fileName.unote'));
       
       final noteData = {
         'pages': pages.map((page) => page.map((stroke) => {
-          'points': (stroke as Stroke).points.map((p) => p?.dx != null ? {'x': p!.dx, 'y': p.dy} : null).toList(),
+          'points': stroke.points.map((p) => p?.dx != null ? {'x': p!.dx, 'y': p.dy} : null).toList(),
           'color': stroke.color.value,
           'thickness': stroke.thickness,
           'isEraser': stroke.isEraser,
+          'penStyle': stroke.penStyle.index,
         }).toList()).toList(),
         'timestamp': DateTime.now().toIso8601String(),
       };
 
       await file.writeAsString(jsonEncode(noteData));
+      print('Note saved at: ${file.path}');
       
       // Save preview of the first page
       if (pages.isNotEmpty) {
@@ -65,12 +77,10 @@ class NoteSaver {
   }
 
   // Load note from file
-  static Future<List<List<Offset?>>> loadNote(String fileName) async {
+  static Future<List<List<Stroke>>> loadNote(String fileName) async {
     try {
-      final directory = await getExternalStorageDirectory();
-      if (directory == null) throw Exception('Failed to access external storage');
-
-      final file = File('${directory.path}/UNotes/$fileName.unote');
+      final noteDirectory = Directory(await getNotesDirectory());
+      final file = File(path.join(noteDirectory.path, '$fileName.unote'));
 
       if (!await file.exists()) {
         throw Exception('Note file does not exist');
@@ -78,10 +88,25 @@ class NoteSaver {
 
       final jsonString = await file.readAsString();
       final noteData = jsonDecode(jsonString);
+      
+      return (noteData['pages'] as List).map<List<Stroke>>((page) {
+        return (page as List).map<Stroke>((strokeData) {
+          final points = (strokeData['points'] as List).map<Offset?>((point) {
+            if (point == null) return null;
+            return Offset(
+              (point['x'] as num).toDouble(),
+              (point['y'] as num).toDouble(),
+            );
+          }).toList();
 
-      // Convert JSON data back to list of pages with points
-      return (noteData['pages'] as List).map<List<Offset?>>((page) {
-        return _pointsFromJson(page as List);
+          return Stroke(
+            points,
+            Color(strokeData['color'] as int),
+            (strokeData['thickness'] as num).toDouble(),
+            strokeData['isEraser'] as bool,
+            PenStyle.normal,
+          );
+        }).toList();
       }).toList();
     } catch (e) {
       print('Error loading note: $e');
@@ -142,6 +167,20 @@ class NoteSaver {
       await previewFile.writeAsBytes(pngBytes.buffer.asUint8List());
     } catch (e) {
       print('Error saving preview: $e');
+    }
+  }
+
+  static Future<void> deleteNote(String fileName) async {
+    try {
+      final noteDirectory = Directory(await getNotesDirectory());
+      final file = File(path.join(noteDirectory.path, '$fileName.unote'));
+      if (await file.exists()) {
+        await file.delete();
+        print('Note deleted: $fileName');
+      }
+    } catch (e) {
+      print('Error deleting note: $e');
+      throw Exception('Failed to delete note');
     }
   }
 }
