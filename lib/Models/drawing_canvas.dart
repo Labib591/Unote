@@ -7,12 +7,14 @@ class DrawingPainter extends CustomPainter {
   final ShapeType currentShape;
   final Color currentColor;
   final double currentThickness;
+  final Color backgroundColor;
 
   DrawingPainter(
     this.strokes, {
     required this.currentShape,
     required this.currentColor,
     required this.currentThickness,
+    required this.backgroundColor,
   });
 
   @override
@@ -70,6 +72,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
               currentColor: pageManager.currentColor,
               currentThickness: pageManager.currentThickness,
               currentShape: ShapeType.none,
+              backgroundColor: pageManager.backgroundColor,
             ),
             size: Size.infinite,
           ),

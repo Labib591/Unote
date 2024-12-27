@@ -10,204 +10,164 @@ import 'package:unote/Models/drawing_canvas.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<FileSystemEntity> notes = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadNotes();
-  }
-
-  Future<void> _loadNotes() async {
-    try {
-      final noteDirectory = Directory(await NoteSaver.getNotesDirectory());
-      if (!await noteDirectory.exists()) {
-        await noteDirectory.create(recursive: true);
-      }
-
-      final files = await noteDirectory.list().toList();
-      setState(() {
-        notes = files.where((file) => file.path.endsWith('.unote')).toList();
-      });
-    } catch (e) {
-      print('Error loading notes: $e');
-    }
-  }
-
-  String _getFileName(String path) {
-    return path.split('/').last.replaceAll('.unote', '');
-  }
-
-  Future<String> _getLastModified(String path) async {
-    final file = File(path);
-    final modified = await file.lastModified();
-    return '${modified.day}/${modified.month}/${modified.year}';
-  }
-
-  Future<File?> _getPreviewFile(String fileName) async {
-    final directory = await getExternalStorageDirectory();
-    if (directory == null) return null;
-
-    final previewFile = File('${directory.path}/UNotes/previews/$fileName.png');
-    if (await previewFile.exists()) {
-      return previewFile;
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('My Notes'),
         backgroundColor: Colors.black,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.add, color: Colors.white),
-            onPressed: () {
-              TextEditingController nameController = TextEditingController();
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text('New Note'),
-                  content: TextField(
-                    controller: nameController,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      hintText: 'Enter note name',
-                    ),
-                  ),
-                  actions: [
-                    TextButton(
-                      child: Text('Cancel'),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    TextButton(
-                      child: Text('Create'),
-                      onPressed: () {
-                        final name = nameController.text;
-                        if (name.isNotEmpty) {
-                          final fileName = name.replaceAll(RegExp(r'[^\w\s-]'), '');
-                          final pageManager = PageManager();
-                          pageManager.loadPages([[]], fileName);
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChangeNotifierProvider(
-                                create: (_) => pageManager,
-                                child: editorScreen(),
-                              ),
-                            ),
-                          ).then((_) => _loadNotes());
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
+        title: Text('UNote'),
       ),
-      body: Container(
-        color: Colors.black,
-        child: ListView.builder(
-          itemCount: notes.length,
-          itemBuilder: (context, index) {
-            final fileName = path.basenameWithoutExtension(notes[index].path);
-            return ListTile(
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    border: Border.all(color: Colors.grey.shade800),
-                  ),
-                  clipBehavior: Clip.hardEdge,
+      body: FutureBuilder<List<String>>(
+        future: NoteSaver.listNotes(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return Center(child: CircularProgressIndicator());
+          }
+
+          final files = snapshot.data!;
+          return ListView.builder(
+            itemCount: files.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return ListTile(
+                  title: Text('New Note', style: TextStyle(color: Colors.white)),
+                  leading: Icon(Icons.add, color: Colors.white),
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (dialogContext) {
+                        final controller = TextEditingController();
+                        return AlertDialog(
+                          backgroundColor: Colors.grey[900],
+                          title: Text('New Note', style: TextStyle(color: Colors.white)),
+                          content: TextField(
+                            controller: controller,
+                            style: TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: 'Enter note name',
+                              hintStyle: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              child: Text('Cancel'),
+                              onPressed: () => Navigator.pop(dialogContext),
+                            ),
+                            TextButton(
+                              child: Text('Create'),
+                              onPressed: () async {
+                                if (controller.text.isNotEmpty) {
+                                  final pageManager = PageManager();
+                                  pageManager.setFileName(controller.text);
+                                  Navigator.pop(dialogContext);
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ChangeNotifierProvider.value(
+                                        value: pageManager,
+                                        child: EditorScreen(),
+                                      ),
+                                    ),
+                                  );
+                                  // Refresh the list when returning from editor
+                                  setState(() {});
+                                }
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                );
+              }
+
+              final fileName = files[index - 1];
+              return ListTile(
+                title: Text(fileName, style: TextStyle(color: Colors.grey[900])),
+                leading: Container(
+                  width: 40,
+                  height: 40,
                   child: FutureBuilder<List<List<Stroke>>>(
                     future: NoteSaver.loadNote(fileName),
                     builder: (context, snapshot) {
                       if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                        return FittedBox(
-                          fit: BoxFit.contain,
-                          child: SizedBox(
-                            width: 50,
-                            height: 50,
-                            child: CustomPaint(
-                              painter: DrawingPainter(
-                                snapshot.data![0],
-                                currentColor: Colors.white,
-                                currentThickness: 2.0,
-                                currentShape: ShapeType.none,
-                              ),
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: CustomPaint(
+                            painter: DrawingPainter(
+                              snapshot.data![0],
+                              currentColor: Colors.grey,
+                              currentThickness: 2.0,
+                              currentShape: ShapeType.none,
+                              backgroundColor: Colors.black,
                             ),
                           ),
                         );
                       }
-                      return Center(child: Icon(Icons.note, color: Colors.grey));
+                      return Icon(Icons.note, color: Colors.red);
                     },
                   ),
                 ),
-              ),
-              title: Text(fileName, style: TextStyle(color: Colors.white)),
-              trailing: IconButton(
-                icon: Icon(Icons.delete, color: Colors.red),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      backgroundColor: Colors.grey.shade900,
-                      title: Text('Delete Note', style: TextStyle(color: Colors.white)),
-                      content: Text('Are you sure you want to delete "$fileName"?',
-                          style: TextStyle(color: Colors.white)),
-                      actions: [
-                        TextButton(
-                          child: Text('Cancel'),
-                          onPressed: () => Navigator.pop(context),
+                trailing: IconButton(
+                  icon: Icon(Icons.delete, color: Colors.red),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        backgroundColor: Colors.grey[900],
+                        title: Text('Delete Note', style: TextStyle(color: Colors.white)),
+                        content: Text(
+                          'Are you sure you want to delete this note?',
+                          style: TextStyle(color: Colors.white),
                         ),
-                        TextButton(
-                          child: Text('Delete', style: TextStyle(color: Colors.red)),
-                          onPressed: () async {
-                            await NoteSaver.deleteNote(fileName);
-                            Navigator.pop(context);
-                            _loadNotes();
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-              onTap: () async {
-                try {
+                        actions: [
+                          TextButton(
+                            child: Text('Cancel'),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                          TextButton(
+                            child: Text('Delete', style: TextStyle(color: Colors.red)),
+                            onPressed: () async {
+                              await NoteSaver.deleteNote(fileName);
+                              Navigator.pop(context);
+                              // Refresh the screen
+                              if (context.mounted) {
+                                setState(() {});
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                onTap: () async {
                   final pages = await NoteSaver.loadNote(fileName);
-                  Navigator.push(
+                  final pageManager = PageManager();
+                  pageManager.loadPages(pages, fileName);
+                  if (!context.mounted) return;
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => ChangeNotifierProvider(
-                        create: (_) {
-                          final pageManager = PageManager();
-                          pageManager.loadPages(pages, fileName);
-                          return pageManager;
-                        },
-                        child: editorScreen(),
+                      builder: (context) => ChangeNotifierProvider.value(
+                        value: pageManager,
+                        child: EditorScreen(),
                       ),
                     ),
-                  ).then((_) => _loadNotes());
-                } catch (e) {
-                  print('Error loading note: $e');
-                }
-              },
-            );
-          },
-        ),
+                  );
+                  // Refresh the list when returning from editor
+                  setState(() {});
+                },
+              );
+            },
+          );
+        },
       ),
     );
   }

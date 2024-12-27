@@ -38,6 +38,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
               currentColor: pageManager.currentColor,
               currentThickness: pageManager.currentThickness,
               currentShape: ShapeType.none,
+              backgroundColor: pageManager.backgroundColor,
             ),
             size: Size.infinite,
           ),
@@ -52,96 +53,41 @@ class DrawingPainter extends CustomPainter {
   final Color currentColor;
   final double currentThickness;
   final ShapeType currentShape;
+  final Color backgroundColor;
 
-  DrawingPainter(this.strokes, {
+  DrawingPainter(
+    this.strokes, {
     required this.currentColor,
     required this.currentThickness,
     required this.currentShape,
+    required this.backgroundColor,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawColor(Colors.black, BlendMode.src);
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = backgroundColor,
+    );
 
     for (final stroke in strokes) {
       final paint = Paint()
-        ..color = stroke.isEraser ? Colors.black : stroke.color
+        ..color = stroke.isEraser ? backgroundColor : stroke.color
         ..strokeWidth = stroke.thickness
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..style = PaintingStyle.stroke;
 
-      if (stroke.points.length < 2) continue;
-
-      switch (stroke.penStyle) {
-        case PenStyle.normal:
-          _drawNormalLine(canvas, stroke.points, paint);
-          break;
-        case PenStyle.dotted:
-          _drawDottedLine(canvas, stroke.points, paint);
-          break;
-        case PenStyle.dashed:
-          _drawDashedLine(canvas, stroke.points, paint);
-          break;
-        case PenStyle.double:
-          _drawDoubleLine(canvas, stroke.points, paint);
-          break;
-      }
-    }
-  }
-
-  void _drawNormalLine(Canvas canvas, List<Offset?> points, Paint paint) {
-    for (int i = 0; i < points.length - 1; i++) {
-      if (points[i] != null && points[i + 1] != null) {
-        canvas.drawLine(points[i]!, points[i + 1]!, paint);
-      }
-    }
-  }
-
-  void _drawDottedLine(Canvas canvas, List<Offset?> points, Paint paint) {
-    for (int i = 0; i < points.length - 1; i++) {
-      if (points[i] != null && points[i + 1] != null) {
-        final distance = (points[i + 1]! - points[i]!).distance;
-        final unitVector = (points[i + 1]! - points[i]!) / distance;
-        
-        for (double d = 0; d < distance; d += 10) {
-          final dot = points[i]! + unitVector * d;
-          canvas.drawCircle(dot, paint.strokeWidth / 2, paint);
+      for (int i = 0; i < stroke.points.length - 1; i++) {
+        if (stroke.points[i] != null && stroke.points[i + 1] != null) {
+          canvas.drawLine(stroke.points[i]!, stroke.points[i + 1]!, paint);
         }
-      }
-    }
-  }
-
-  void _drawDashedLine(Canvas canvas, List<Offset?> points, Paint paint) {
-    for (int i = 0; i < points.length - 1; i++) {
-      if (points[i] != null && points[i + 1] != null) {
-        final distance = (points[i + 1]! - points[i]!).distance;
-        final unitVector = (points[i + 1]! - points[i]!) / distance;
-        
-        for (double d = 0; d < distance; d += 20) {
-          final start = points[i]! + unitVector * d;
-          final end = points[i]! + unitVector * min(d + 10, distance);
-          canvas.drawLine(start, end, paint);
-        }
-      }
-    }
-  }
-
-  void _drawDoubleLine(Canvas canvas, List<Offset?> points, Paint paint) {
-    for (int i = 0; i < points.length - 1; i++) {
-      if (points[i] != null && points[i + 1] != null) {
-        final vector = points[i + 1]! - points[i]!;
-        final distance = vector.distance;
-        final perpendicular = Offset(-vector.dy, vector.dx) * (2 / distance);
-        
-        canvas.drawLine(points[i]! + perpendicular, points[i + 1]! + perpendicular, paint);
-        canvas.drawLine(points[i]! - perpendicular, points[i + 1]! - perpendicular, paint);
       }
     }
   }
 
   @override
-  bool shouldRepaint(DrawingPainter oldDelegate) {
-    return oldDelegate.strokes != strokes;
+  bool shouldRepaint(covariant DrawingPainter oldDelegate) {
+    return true;
   }
 }

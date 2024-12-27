@@ -7,9 +7,8 @@ class Stroke {
   final Color color;
   final double thickness;
   final bool isEraser;
-  final PenStyle penStyle;
 
-  Stroke(this.points, this.color, this.thickness, this.isEraser, this.penStyle);
+  Stroke(this.points, this.color, this.thickness, this.isEraser);
 }
 
 enum ShapeType {
@@ -62,6 +61,8 @@ class PageManager extends ChangeNotifier{
   // Add pen style field
   PenStyle _currentPenStyle = PenStyle.normal;
 
+  Color _backgroundColor = Colors.black;
+
   List<Stroke> get currentPage {
     print("Current page has ${_pages[_currentIndex].length} strokes"); // Debug print
     return _pages[_currentIndex];
@@ -106,6 +107,10 @@ class PageManager extends ChangeNotifier{
   bool get canGoToPreviousPage => _currentIndex > 0;
   bool get canGoToNextPage => _currentIndex < _pages.length - 1;
 
+  Color get backgroundColor => _backgroundColor;
+
+  int get pageCount => _pages.length;
+
   void previousPage() {
     if (canGoToPreviousPage) {
       _currentIndex--;
@@ -143,6 +148,7 @@ class PageManager extends ChangeNotifier{
 
   void setFileName(String name) {
     _fileName = name;
+    print('Filename set to: $_fileName'); // Debug print
     notifyListeners();
   }
 
@@ -171,7 +177,6 @@ class PageManager extends ChangeNotifier{
         stroke.color,
         stroke.thickness,
         stroke.isEraser,
-        stroke.penStyle,
       )))
     )));
     _redoHistory.clear();
@@ -214,7 +219,6 @@ class PageManager extends ChangeNotifier{
         _currentColor,
         _currentThickness,
         _isErasing,
-        _currentPenStyle,
       );
       _pages[_currentIndex].add(_currentStroke!);
     } else {
@@ -260,185 +264,41 @@ class PageManager extends ChangeNotifier{
     if (_fileName == null) return;
     
     try {
-      await NoteSaver.saveNote(_pages, _fileName!);
+      await NoteSaver.saveNote(_fileName!, _pages);
       print('Auto-saved note: $_fileName');
     } catch (e) {
       print('Error auto-saving note: $e');
     }
   }
 
-  void startSelection() {
-    _isSelecting = true;
-    _selectionRect = null;
-    _selectionStart = null;
-    _selectionEnd = null;
-    notifyListeners();
-  }
-
-  void updateSelection(Offset start, Offset end) {
-    _selectionStart = start;
-    _selectionEnd = end;
-    _selectionRect = Rect.fromPoints(start, end);
-    notifyListeners();
-  }
-
-  void copySelection() {
-    if (_selectionRect == null) return;
-    _copiedStrokes = _getStrokesInSelection();
-    notifyListeners();
-  }
-
-  void deleteSelection() {
-    if (_selectionRect == null) return;
-    _pages[_currentIndex] = _pages[_currentIndex]
-        .where((stroke) => !_isStrokeInSelection(stroke))
-        .toList();
-    _selectionRect = null;
-    _isSelecting = false;
-    notifyListeners();
-    _autoSave();
-  }
-
-  void pasteSelection(Offset offset) {
-    if (_copiedStrokes == null) return;
-    final translatedStrokes = _copiedStrokes!.map((stroke) {
-      return Stroke(
-        stroke.points.map((p) => p != null 
-          ? p + offset 
-          : null).toList(),
-        stroke.color,
-        stroke.thickness,
-        stroke.isEraser,
-        stroke.penStyle,
-      );
-    }).toList();
-    
-    _pages[_currentIndex].addAll(translatedStrokes);
-    notifyListeners();
-    _autoSave();
-  }
-
-  List<Stroke> _getStrokesInSelection() {
-    if (_selectionRect == null) return [];
-    return _pages[_currentIndex]
-        .where((stroke) => _isStrokeInSelection(stroke))
-        .toList();
-  }
-
-  bool _isStrokeInSelection(Stroke stroke) {
-    if (_selectionRect == null) return false;
-    return stroke.points
-        .where((p) => p != null)
-        .any((p) => _selectionRect!.contains(p!));
-  }
-
-  void setShapeType(ShapeType shape) {
-    print('Setting shape type to: $shape'); // Debug print
-    _currentShape = shape;
-    notifyListeners();
-  }
-
-  void startShape(Offset point) {
-    print('Starting shape at: $point'); // Debug print
-    _shapeStart = point;
-    _shapeEnd = point;
-    notifyListeners();
-  }
-
-  void updateShape(Offset point) {
-    print('Updating shape to: $point'); // Debug print
-    _shapeEnd = point;
-    notifyListeners();
-  }
-
-  void endShape() {
-    print('Ending shape. Type: $_currentShape'); // Debug print
-    if (_shapeStart != null && _shapeEnd != null) {
-      _undoStack.add(List.from(_pages[_currentIndex]));
-      _redoStack.clear();
-      
-      final points = <Offset?>[];
-      
-      switch (_currentShape) {
-        case ShapeType.line:
-          points.addAll([_shapeStart!, _shapeEnd!]);
-          break;
-          
-        case ShapeType.rectangle:
-          final rect = Rect.fromPoints(_shapeStart!, _shapeEnd!);
-          points.addAll([
-            rect.topLeft,
-            rect.topRight,
-            rect.bottomRight,
-            rect.bottomLeft,
-            rect.topLeft,
-          ]);
-          break;
-          
-        case ShapeType.circle:
-          final center = Offset(
-            (_shapeStart!.dx + _shapeEnd!.dx) / 2,
-            (_shapeStart!.dy + _shapeEnd!.dy) / 2,
-          );
-          final radius = (_shapeEnd! - _shapeStart!).distance / 2;
-          for (var i = 0; i <= 360; i += 10) {
-            final radians = i * (pi / 180);
-            points.add(Offset(
-              center.dx + radius * cos(radians),
-              center.dy + radius * sin(radians),
-            ));
-          }
-          break;
-          
-        case ShapeType.triangle:
-          points.addAll([
-            _shapeStart!,
-            _shapeEnd!,
-            Offset(_shapeStart!.dx - (_shapeEnd!.dx - _shapeStart!.dx), _shapeEnd!.dy),
-            _shapeStart!,
-          ]);
-          break;
-          
-        case ShapeType.arrow:
-          final delta = _shapeEnd! - _shapeStart!;
-          final length = delta.distance;
-          final unitVector = delta / length;
-          final perpendicular = Offset(-unitVector.dy, unitVector.dx);
-          
-          points.addAll([
-            _shapeStart!,
-            _shapeEnd!,
-            null,
-            _shapeEnd!,
-            _shapeEnd! - unitVector * (length * 0.2) + perpendicular * (length * 0.1),
-            null,
-            _shapeEnd!,
-            _shapeEnd! - unitVector * (length * 0.2) - perpendicular * (length * 0.1),
-          ]);
-          break;
-          
-        case ShapeType.none:
-          break;
-      }
-      
-      if (points.isNotEmpty) {
-        _pages[_currentIndex].add(Stroke(
-          points,
-          _currentColor,
-          _currentThickness,
-          false,
-          _currentPenStyle,
-        ));
-      }
-    }
-    
-    _shapeStart = null;
-    _shapeEnd = null;
-    notifyListeners();
-  }
-
   void setPenStyle(PenStyle style) {
     _currentPenStyle = style;
+    notifyListeners();
+  }
+
+  void setBackgroundColor(Color color) {
+    _backgroundColor = color;
+    notifyListeners();
+  }
+
+  void goToPage(int index) {
+    if (index >= 0 && index < _pages.length) {
+      _currentIndex = index;
+      notifyListeners();
+    }
+  }
+
+  Future<void> saveToFile() async {
+    if (_fileName != null) {
+      await NoteSaver.saveNote(_fileName!, _pages);
+    }
+  }
+
+  Future<void> loadFromFile(String fileName) async {
+    final pages = await NoteSaver.loadNote(fileName);
+    _pages = pages;  // pages is already List<List<Stroke>>
+    _backgroundColor = Colors.black;  // Use default background color
+    _fileName = fileName;
     notifyListeners();
   }
 }

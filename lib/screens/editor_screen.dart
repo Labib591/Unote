@@ -7,8 +7,44 @@ import 'package:unote/Models/save.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:app_settings/app_settings.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'dart:async';
+import 'package:flutter_hooks/flutter_hooks.dart';
 
-class editorScreen extends StatelessWidget{
+class EditorScreen extends StatefulWidget {
+  @override
+  State<EditorScreen> createState() => _EditorScreenState();
+}
+
+class _EditorScreenState extends State<EditorScreen> {
+  Timer? _autoSaveTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoSaveTimer = Timer.periodic(Duration(seconds: 5), (_) async {
+      final pageManager = context.read<PageManager>();
+      if (pageManager.fileName != null) {
+        try {
+          await NoteSaver.saveNote(pageManager.fileName!, pageManager.pages);
+          print('Auto-saved: ${pageManager.fileName}'); // Debug print
+        } catch (e) {
+          print('Auto-save error: $e'); // Debug print
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoSaveTimer?.cancel();
+    final pageManager = context.read<PageManager>();
+    if (pageManager.fileName != null) {
+      NoteSaver.saveNote(pageManager.fileName!, pageManager.pages);
+      print('Final save on dispose: ${pageManager.fileName}'); // Debug print
+    }
+    super.dispose();
+  }
+
   Future<bool> _requestPermission() async {
     try {
       var status = await Permission.storage.status;
@@ -69,10 +105,12 @@ class editorScreen extends StatelessWidget{
                 }
 
                 try {
+                  final fileName = fileNameController.text;
                   await NoteSaver.saveNote(
+                    fileName,
                     context.read<PageManager>().pages,
-                    fileNameController.text,
                   );
+                  context.read<PageManager>().setFileName(fileName);
                   Navigator.pop(dialogContext);
                   if (!dialogContext.mounted) return;
                   ScaffoldMessenger.of(dialogContext).showSnackBar(
@@ -97,16 +135,15 @@ class editorScreen extends StatelessWidget{
   @override
   Widget build(BuildContext context) {
     final pageManager = context.watch<PageManager>();
+
     return WillPopScope(
       onWillPop: () async {
-        // Force one last save before leaving
-        final pageManager = context.read<PageManager>();
         if (pageManager.fileName != null) {
           try {
-            await NoteSaver.saveNote(pageManager.pages, pageManager.fileName!);
-            print('Auto-saved note before exit: ${pageManager.fileName}');
+            await NoteSaver.saveNote(pageManager.fileName!, pageManager.pages);
+            print('Saved on exit: ${pageManager.fileName}'); // Debug print
           } catch (e) {
-            print('Error saving note on exit: $e');
+            print('Save on exit error: $e'); // Debug print
           }
         }
         return true;
@@ -119,7 +156,51 @@ class editorScreen extends StatelessWidget{
             icon: Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () => Navigator.pop(context),
           ),
-          title: Text(pageManager.fileName ?? 'Untitled'),
+          title: Text(pageManager.fileName ?? 'Untitled',
+          style: TextStyle(color: Colors.white),),
+          actions: [
+            PopupMenuButton<int>(
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                margin: EdgeInsets.only(right: 16),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Page ${pageManager.currentIndex + 1}/${pageManager.pageCount}',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Icon(Icons.arrow_drop_down, color: Colors.white, size: 20),
+                  ],
+                ),
+              ),
+              itemBuilder: (context) => List.generate(
+                pageManager.pageCount,
+                (index) => PopupMenuItem(
+                  value: index,
+                  child: Text(
+                    'Page ${index + 1}',
+                    style: TextStyle(
+                      color: index == pageManager.currentIndex ? Colors.purple : Colors.white,
+                      fontWeight: index == pageManager.currentIndex ? 
+                        FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+              onSelected: (index) {
+                pageManager.goToPage(index);
+              },
+              color: Colors.grey.shade900,
+            ),
+          ],
         ),
         body: Stack(
           children: [
@@ -143,93 +224,47 @@ class editorScreen extends StatelessWidget{
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // Pen style and color
-                        PopupMenuButton<dynamic>(
+                        PopupMenuButton<Color>(
                           icon: Icon(Icons.brush, color: Colors.white),
                           itemBuilder: (context) => [
-                            // Pen Styles
                             PopupMenuItem(
-                              child: ListTile(
-                                title: Text('Pen Styles', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              ),
                               enabled: false,
-                            ),
-                            PopupMenuItem(
-                              value: {'type': 'style', 'style': PenStyle.normal},
-                              child: Row(
-                                children: [
-                                  Icon(Icons.horizontal_rule),
-                                  SizedBox(width: 8),
-                                  Text('Normal'),
-                                ],
+                              child: Text('Colors',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold
+                                )
                               ),
                             ),
                             PopupMenuItem(
-                              value: {'type': 'style', 'style': PenStyle.dotted},
-                              child: Row(
-                                children: [
-                                  Text('••••'),
-                                  SizedBox(width: 8),
-                                  Text('Dotted'),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: {'type': 'style', 'style': PenStyle.dashed},
-                              child: Row(
-                                children: [
-                                  Text('- - -'),
-                                  SizedBox(width: 8),
-                                  Text('Dashed'),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: {'type': 'style', 'style': PenStyle.double},
-                              child: Row(
-                                children: [
-                                  Text('═'),
-                                  SizedBox(width: 8),
-                                  Text('Double'),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              child: Divider(color: Colors.grey),
-                              height: 1,
                               enabled: false,
-                            ),
-                            // Colors
-                            PopupMenuItem(
-                              child: ListTile(
-                                title: Text('Colors', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              child: Container(
+                                width: 200,
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    ...Colors.primaries.map((color) => InkWell(
+                                      onTap: () {
+                                        context.read<PageManager>().setColor(color);
+                                        Navigator.pop(context);
+                                      },
+                                      child: Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: color,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white.withOpacity(0.2)),
+                                        ),
+                                      ),
+                                    )).toList(),
+                                  ],
+                                ),
                               ),
-                              enabled: false,
                             ),
-                            ...Colors.primaries.map((color) => PopupMenuItem(
-                              value: {'type': 'color', 'color': color},
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 20,
-                                    height: 20,
-                                    decoration: BoxDecoration(
-                                      color: color,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(color.toString().split('(0xff')[1].split(')')[0]),
-                                ],
-                              ),
-                            )).toList(),
                           ],
-                          onSelected: (value) {
-                            if (value['type'] == 'style') {
-                              context.read<PageManager>().setPenStyle(value['style']);
-                            } else if (value['type'] == 'color') {
-                              context.read<PageManager>().setColor(value['color']);
-                            }
-                          },
+                          color: Colors.grey.shade900,
                         ),
                         // Pen thickness
                         IconButton(
@@ -334,6 +369,64 @@ class editorScreen extends StatelessWidget{
                               ),
                             );
                           },
+                        ),
+                        // Background color
+                        PopupMenuButton<Color>(
+                          icon: Icon(Icons.format_color_fill, color: Colors.white),
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              enabled: false,
+                              child: Text('Background Color',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold
+                                )
+                              ),
+                            ),
+                            PopupMenuItem(
+                              enabled: false,
+                              child: Container(
+                                width: 200,
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    ...Colors.primaries.map((color) => InkWell(
+                                      onTap: () {
+                                        context.read<PageManager>().setBackgroundColor(color);
+                                        Navigator.pop(context);
+                                      },
+                                      child: Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: color,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white.withOpacity(0.2)),
+                                        ),
+                                      ),
+                                    )).toList(),
+                                    ...[ Colors.black, Colors.white ].map((color) => InkWell(
+                                      onTap: () {
+                                        context.read<PageManager>().setBackgroundColor(color);
+                                        Navigator.pop(context);
+                                      },
+                                      child: Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: color,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                                        ),
+                                      ),
+                                    )).toList(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                          color: Colors.grey.shade900,
                         ),
                       ],
                     ),
